@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:xano_sdk/xano_sdk.dart';
 
@@ -45,12 +47,14 @@ class _ChatEntry {
   final bool isSystem;
   final bool isMine;
   final bool isServerEvent;
+  final DateTime? timestamp;
 
   _ChatEntry({
     required this.text,
     this.isSystem = false,
     this.isMine = false,
     this.isServerEvent = false,
+    this.timestamp,
   });
 }
 
@@ -65,8 +69,8 @@ class _ChatPageState extends State<ChatPage> {
   late final XanoRealtimeClient _client;
   late final XanoRealtimeChannel _channel;
 
+  late final String _sessionId;
   final List<_ChatEntry> _messages = [];
-  final Set<String> _pendingSent = {};
   final TextEditingController _inputCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
 
@@ -76,6 +80,8 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    final rng = Random();
+    _sessionId = List.generate(16, (_) => rng.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
     _initRealtime();
   }
 
@@ -110,12 +116,8 @@ class _ChatPageState extends State<ChatPage> {
 
     // ── incoming messages ──────────────────────────────────────────────────
     _channel.on(XanoRealtimeAction.message, (msg) {
-      final payload = msg.payload;
-      final text = payload is Map
-          ? payload['text']?.toString() ?? payload.toString()
-          : payload.toString();
-      final isMine = _pendingSent.remove(text);
-      setState(() => _messages.add(_ChatEntry(text: text, isMine: isMine)));
+      final entry = _parseMessageEntry(msg.payload);
+      setState(() => _messages.add(entry));
       _scrollToBottom();
     }, onError: (err) {
       _addSystem('Error: ${err.payload}');
@@ -123,20 +125,20 @@ class _ChatPageState extends State<ChatPage> {
 
     // ── history ───────────────────────────────────────────────────────────
     _channel.on(XanoRealtimeAction.history, (msg) {
-      final items = msg.payload;
-      if (items is List) {
+      final raw = msg.payload;
+      final items = raw is List
+          ? raw
+          : (raw is Map ? raw['history'] as List? : null);
+      if (items != null) {
         setState(() {
-          _addSystem('── History (${items.length} messages) ──');
+          _messages.clear();
+          _addSystem('-- History (${items.length} messages) --');
           for (final item in items) {
-            String text;
             if (item is Map) {
-              final payload = item['payload'];
-              text = (payload is Map ? payload['text']?.toString() : null) ??
-                  item.toString();
+              _messages.add(_parseMessageEntry(item['payload']));
             } else {
-              text = item.toString();
+              _messages.add(_ChatEntry(text: item.toString()));
             }
-            _messages.add(_ChatEntry(text: text));
           }
         });
         _scrollToBottom();
@@ -190,12 +192,27 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
+  _ChatEntry _parseMessageEntry(dynamic payload) {
+    if (payload is Map) {
+      final text = payload['text']?.toString() ?? payload.toString();
+      final isMine = payload['senderId'] == _sessionId;
+      final ts = payload['timestamp'] is int
+          ? DateTime.fromMillisecondsSinceEpoch(payload['timestamp'] as int)
+          : null;
+      return _ChatEntry(text: text, isMine: isMine, timestamp: ts);
+    }
+    return _ChatEntry(text: payload.toString());
+  }
+
   void _sendMessage() {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty) return;
 
-    _pendingSent.add(text);
-    _channel.message({'text': text});
+    _channel.message({
+      'text': text,
+      'senderId': _sessionId,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
     _inputCtrl.clear();
   }
 
@@ -377,6 +394,9 @@ class _MessageBubble extends StatelessWidget {
 
     // Chat bubble (right = mine, left = theirs)
     final isMine = entry.isMine;
+    final timeStr = entry.timestamp != null
+        ? '${entry.timestamp!.hour.toString().padLeft(2, '0')}:${entry.timestamp!.minute.toString().padLeft(2, '0')}'
+        : null;
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -396,11 +416,30 @@ class _MessageBubble extends StatelessWidget {
             bottomRight: Radius.circular(isMine ? 4 : 18),
           ),
         ),
-        child: Text(
-          entry.text,
-          style: TextStyle(
-            color: isMine ? cs.onPrimary : cs.onSecondaryContainer,
-          ),
+        child: Column(
+          crossAxisAlignment:
+              isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              entry.text,
+              style: TextStyle(
+                color: isMine ? cs.onPrimary : cs.onSecondaryContainer,
+              ),
+            ),
+            if (timeStr != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  timeStr,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: (isMine ? cs.onPrimary : cs.onSecondaryContainer)
+                        .withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
