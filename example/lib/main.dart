@@ -44,8 +44,14 @@ class _ChatEntry {
   final String text;
   final bool isSystem;
   final bool isMine;
+  final bool isServerEvent;
 
-  _ChatEntry({required this.text, this.isSystem = false, this.isMine = false});
+  _ChatEntry({
+    required this.text,
+    this.isSystem = false,
+    this.isMine = false,
+    this.isServerEvent = false,
+  });
 }
 
 class ChatPage extends StatefulWidget {
@@ -153,9 +159,16 @@ class _ChatPageState extends State<ChatPage> {
       });
     });
 
-    // ── custom server events ───────────────────────────────────────────────
+    // ── custom server events (from api.realtime_event) ────────────────────
     _channel.on(XanoRealtimeAction.event, (msg) {
-      _addSystem('Server event: ${msg.payload}');
+      final payload = msg.payload;
+      final text = payload is Map
+          ? payload['data']?.toString() ?? payload.toString()
+          : payload.toString();
+      setState(() {
+        _messages.add(_ChatEntry(text: text, isServerEvent: true));
+      });
+      _scrollToBottom();
     });
   }
 
@@ -330,6 +343,35 @@ class _MessageBubble extends StatelessWidget {
               color: cs.onSurface.withOpacity(0.5),
               fontStyle: FontStyle.italic,
             ),
+          ),
+        ),
+      );
+    }
+
+    // Server event bubble (centred, accent color)
+    if (entry.isServerEvent) {
+      return Align(
+        alignment: Alignment.center,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: cs.tertiaryContainer,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.tertiary.withOpacity(0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cell_tower, size: 16, color: cs.onTertiaryContainer),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  entry.text,
+                  style: TextStyle(color: cs.onTertiaryContainer),
+                ),
+              ),
+            ],
           ),
         ),
       );
