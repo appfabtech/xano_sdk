@@ -3,6 +3,8 @@
 A faithful Flutter/Dart port of the realtime channel API from the official
 [Xano JS SDK](https://www.npmjs.com/package/@xano/js-sdk).
 
+<img width="2856" height="1726" alt="CleanShot 2026-02-27 at 10 07 41@2x" src="https://github.com/user-attachments/assets/3ab5c9b3-c876-47d9-b778-abf5d6e7493f" />
+
 ## Features
 
 | JS SDK feature | Flutter port |
