@@ -196,12 +196,7 @@ class _ChatPageState extends State<ChatPage> {
 
     _pendingSent.add(text);
     _channel.message({'text': text});
-
-    setState(() {
-      _messages.add(_ChatEntry(text: text, isMine: true));
-      _inputCtrl.clear();
-    });
-    _scrollToBottom();
+    _inputCtrl.clear();
   }
 
   void _requestHistory() => _channel.history();
