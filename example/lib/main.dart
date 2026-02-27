@@ -66,6 +66,7 @@ class _ChatPageState extends State<ChatPage> {
   late final XanoRealtimeChannel _channel;
 
   final List<_ChatEntry> _messages = [];
+  final Set<String> _pendingSent = {};
   final TextEditingController _inputCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
 
@@ -113,7 +114,8 @@ class _ChatPageState extends State<ChatPage> {
       final text = payload is Map
           ? payload['text']?.toString() ?? payload.toString()
           : payload.toString();
-      setState(() => _messages.add(_ChatEntry(text: text)));
+      final isMine = _pendingSent.remove(text);
+      setState(() => _messages.add(_ChatEntry(text: text, isMine: isMine)));
       _scrollToBottom();
     }, onError: (err) {
       _addSystem('Error: ${err.payload}');
@@ -192,6 +194,7 @@ class _ChatPageState extends State<ChatPage> {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty) return;
 
+    _pendingSent.add(text);
     _channel.message({'text': text});
 
     setState(() {
